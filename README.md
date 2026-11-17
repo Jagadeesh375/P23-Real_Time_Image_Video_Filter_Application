@@ -30,7 +30,7 @@ P23-Real_Time_Image_Video_Filter_Application/
 ├── invert.h
 ├── README.md
 └── .gitignore
-
+```
 
 ## Module Description
 
@@ -60,6 +60,7 @@ The following header files contain function declarations for their respective CU
 - invert.h
 
 ## Application Workflow
+
         USB Camera
             |
             v
@@ -86,3 +87,4 @@ The following header files contain function declarations for their respective CU
             |
             v
        Display Output
+```
