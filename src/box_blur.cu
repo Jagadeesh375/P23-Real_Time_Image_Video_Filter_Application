@@ -29,9 +29,9 @@ __global__ void boxBlurKernel(unsigned char *input, unsigned char *output, int w
 
         int count = 0;
 
-        for(int dy = -1; dy <= 1; dy++)
+        for(int dy = -3; dy <= 3; dy++)
         {
-            for(int dx = -1; dx <= 1; dx++)
+            for(int dx = -3; dx <= 3; dx++)
             {
                 int sx = x + dx;
                 int sy = y + dy;
