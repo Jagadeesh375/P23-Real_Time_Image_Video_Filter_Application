@@ -180,6 +180,7 @@ bool invertProcess(unsigned char* input, unsigned char* output, int width, int h
 
     if(err != cudaSuccess)
         return false;
+    cout << "Kernel Execution Time: " << kernelTime << " ms" << endl;
 
     // Copy processed frame from GPU to CPU
 

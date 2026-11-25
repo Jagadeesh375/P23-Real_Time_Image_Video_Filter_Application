@@ -202,6 +202,7 @@ bool blurProcess(unsigned char* input, unsigned char* output, int width, int hei
 
     if(err != cudaSuccess)
         return false;
+    cout << "Kernel Execution Time: " << kernelTime << " ms" << endl;
 
     // Copy processed frame from GPU to CPU
 
