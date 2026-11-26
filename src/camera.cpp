@@ -1,52 +1,52 @@
 #include <iostream>
-#include <opencv2/opencv.hpp>
-
 #include "camera.h"
 
-using namespace std;
-using namespace cv;
-
-// Camera object
-static VideoCapture cap;
-
-// Initialize camera
-bool cameraInit()
+Camera::Camera()
 {
-    cap.open(0, CAP_V4L2);
+    std::cout << "Camera object created\n";
+}
 
-    if (!cap.isOpened())
+Camera::~Camera()
+{
+    cleanup();
+}
+
+bool Camera::initialize()
+{
+    // Open the default camera: /dev/video0
+    if (!cap.open(0, cv::CAP_V4L2))
     {
-        cout << "Failed to open camera!" << endl;
+        std::cerr << "Failed to open camera\n";
         return false;
     }
 
-    cout << "Camera opened successfully!" << endl;
+    std::cout << "Camera initialized successfully\n";
 
     return true;
 }
 
-// Capture camera frame
-bool cameraCapture(Mat &frame)
+bool Camera::capture(cv::Mat& frame)
 {
     if (!cap.read(frame))
     {
-        cout << "Failed to capture frame!" << endl;
+        std::cerr << "Failed to capture frame\n";
         return false;
     }
 
     if (frame.empty())
     {
-        cout << "Empty frame received!" << endl;
+        std::cerr << "Captured frame is empty\n";
         return false;
     }
 
+    // Expect 8-bit, 3-channel BGR image
     if (frame.type() != CV_8UC3)
     {
-        cout << "Unsupported camera frame format!" << endl;
+        std::cerr << "Unsupported camera frame format\n";
         return false;
     }
 
-    // Ensure continuous memory layout
+    // Ensure continuous memory for CUDA processing
     if (!frame.isContinuous())
     {
         frame = frame.clone();
@@ -55,13 +55,13 @@ bool cameraCapture(Mat &frame)
     return true;
 }
 
-// Release camera
-void cameraCleanup()
+void Camera::cleanup()
 {
     if (cap.isOpened())
     {
         cap.release();
-    }
 
-    cout << "Camera released successfully!" << endl;
+        std::cout << "Camera released successfully\n";
+    }
 }
+

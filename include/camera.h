@@ -3,8 +3,26 @@
 
 #include <opencv2/opencv.hpp>
 
-bool cameraInit();
-bool cameraCapture(cv::Mat &frame);
-void cameraCleanup();
+class Camera
+{
+private:
+    cv::VideoCapture cap;
+
+public:
+    Camera();
+
+    ~Camera();
+
+    // Prevent copying of camera resources
+    Camera(const Camera&) = delete;
+    Camera& operator=(const Camera&) = delete;
+
+    bool initialize();
+
+    bool capture(cv::Mat& frame);
+
+    void cleanup();
+};
 
 #endif
+
