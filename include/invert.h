@@ -1,10 +1,30 @@
-#ifndef INVERT_H
-#define INVERT_H
+#ifndef INVERSION_H
+#define INVERSION_H
 
-bool invertInit(int width, int height);
+#include <cuda_runtime.h>
 
-bool invertProcess(unsigned char* input, unsigned char* output, int width, int height);
+class Inversion
+{
+private:
+    unsigned char* d_input;
 
-void invertClean();
+    int imgWidth;
+    int imgHeight;
+
+    cudaEvent_t startEvent;
+    cudaEvent_t stopEvent;
+
+public:
+    Inversion();
+
+    ~Inversion();
+
+
+    bool initialize(int width, int height);
+
+    bool process(unsigned char* input, unsigned char* pboOutput, int width, int height);
+
+    void cleanup();
+};
 
 #endif
