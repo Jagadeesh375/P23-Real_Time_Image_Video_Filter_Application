@@ -1,41 +1,20 @@
-#include <cuda_runtime.h>
 #include <iostream>
-
-#include "grayscale.h"
-
-using namespace std;
-
-
-// GPU memory pointers
-
-static unsigned char *d_input = nullptr;
-static unsigned char *d_output = nullptr;
-
-static int imgWidth = 0;
-static int imgHeight = 0;
-
-static cudaEvent_t startEvent = nullptr;
-static cudaEvent_t stopEvent = nullptr;
-// Grayscale CUDA Kernel
-
-__global__ void grayscaleKernel(
-    unsigned char *input,
-    unsigned char *output,
-    int width,
-    int height)
+#include <cstddef>
+#include"grayscale.h"
+__global__ void grayscaleKernel(unsigned char* input, unsigned char* output, int width, int height)
 {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if(x < width && y < height)
+    if (x < width && y < height)
     {
         int index = (y * width + x) * 3;
 
-        unsigned char b = input[index];
-        unsigned char g = input[index + 1];
-        unsigned char r = input[index + 2];
+        unsigned char B = input[index];
+        unsigned char G = input[index + 1];
+        unsigned char R = input[index + 2];
 
-        unsigned char gray = 0.114 * b + 0.587 * g + 0.299 * r;
+        unsigned char gray = 0.114f * B + 0.587f * G + 0.299f * R;
 
         output[index]     = gray;
         output[index + 1] = gray;
@@ -43,192 +22,130 @@ __global__ void grayscaleKernel(
     }
 }
 
-
-// GPU Initialization
-
-bool grayscaleInit(int width, int height)
+Grayscale::Grayscale()
 {
+    d_input = nullptr;
+
+    imgWidth = 0;
+    imgHeight = 0;
+
+    startEvent = nullptr;
+    stopEvent = nullptr;
+}
+
+Grayscale::~Grayscale()
+{
+    cleanup();
+}
+
+bool Grayscale::initialize(int width, int height)
+{
+    if (width <= 0 || height <= 0)
+    {
+        std::cerr << "Invalid image dimensions\n";
+        return false;
+    }
+
+
     imgWidth = width;
     imgHeight = height;
 
-    size_t inputSize = width * height * 3;
-    size_t outputSize = width * height * 3;
+    size_t size = width * height * 3;
 
-    cudaError_t err;
-
-    // Allocate input GPU memory
-
-    err = cudaMalloc((void**)&d_input, inputSize);
-
-    if(err != cudaSuccess)
+    if (cudaMalloc(&d_input, size) != cudaSuccess)
     {
-        cerr << "Input allocation failed: " << cudaGetErrorString(err) << endl;
-
+        std::cerr << "Failed to allocate input memory\n";
+        cleanup();
         return false;
     }
 
-    // Allocate output GPU memory
-
-    err = cudaMalloc((void**)&d_output, outputSize);
-
-    if(err != cudaSuccess)
+    if (cudaEventCreate(&startEvent) != cudaSuccess)
     {
-        cerr << "Output allocation failed: " << cudaGetErrorString(err) << endl;
-
-        cudaFree(d_input);
-        d_input = nullptr;
-
+        std::cerr << "Failed to create start event\n";
+        cleanup();
         return false;
     }
 
-    // Create CUDA events
-
-    err = cudaEventCreate(&startEvent);
-
-    if(err != cudaSuccess)
+    if (cudaEventCreate(&stopEvent) != cudaSuccess)
     {
-        cerr << "Start event creation failed: " << cudaGetErrorString(err) << endl;
-
-        grayscaleClean();
+        std::cerr << "Failed to create stop event\n";
+        cleanup();
         return false;
     }
 
-    err = cudaEventCreate(&stopEvent);
-
-    if(err != cudaSuccess)
-    {
-        cerr << "Stop event creation failed: " << cudaGetErrorString(err) << endl;
-
-        grayscaleClean();
-        return false;
-    }
-
-    cout << "Grayscale GPU memory allocated successfully!" << endl;
+    std::cout << "Grayscale initialized successfully\n";
 
     return true;
 }
 
-
-// Process Camera Frame
-
-bool grayscaleProcess(unsigned char* input, unsigned char* output, int width, int height)
+bool Grayscale::process(unsigned char* input, unsigned char* pboOutput, int width, int height)
 {
-    if(!input || !output || width != imgWidth || height != imgHeight)
+    if (input == nullptr || pboOutput == nullptr || d_input == nullptr ||
+        width != imgWidth || height != imgHeight)
     {
+        std::cerr << "Invalid input or image dimensions\n";
         return false;
     }
 
-    size_t inputSize = width * height * 3;
-    size_t outputSize = width * height * 3;
+    size_t size = width * height * 3;
 
-    cudaError_t err;
-
-    // Copy input frame from CPU to GPU
-
-    err = cudaMemcpy(d_input,input, inputSize, cudaMemcpyHostToDevice);
-
-    if(err != cudaSuccess)
+    if (cudaMemcpy(d_input, input, size, cudaMemcpyHostToDevice) != cudaSuccess)
     {
-        cerr << "Input copy failed: " << cudaGetErrorString(err) << endl;
-
+        std::cerr << "Host to device copy failed\n";
         return false;
     }
-
-    // Define CUDA block and grid
 
     dim3 block(16, 16);
 
     dim3 grid((width + block.x - 1) / block.x,(height + block.y - 1) / block.y);
 
-    // Record starting event
+    cudaEventRecord(startEvent);
 
-    err = cudaEventRecord(startEvent);
+    grayscaleKernel<<<grid, block>>>(d_input, pboOutput, width, height);
 
-    if(err != cudaSuccess)
-        return false;
-
-    // Execute CUDA kernel
-
-    grayscaleKernel<<<grid, block>>>(d_input,d_output,width,height);
-
-    // Check kernel launch error
-
-    err = cudaGetLastError();
-
-    if(err != cudaSuccess)
+    if (cudaGetLastError() != cudaSuccess)
     {
-        cerr << "Kernel launch failed: " << cudaGetErrorString(err) << endl;
-
+        std::cerr << "Grayscale kernel launch failed\n";
         return false;
     }
 
-    // Record stopping event
+    cudaEventRecord(stopEvent);
 
-    err = cudaEventRecord(stopEvent);
-
-    if(err != cudaSuccess)
-        return false;
-
-    // Wait for kernel execution to complete
-
-    err = cudaEventSynchronize(stopEvent);
-
-    if(err != cudaSuccess)
+    if (cudaEventSynchronize(stopEvent) != cudaSuccess)
     {
-        cerr << "Kernel execution failed: " << cudaGetErrorString(err) << endl;
-
+        std::cerr << "CUDA event synchronization failed\n";
         return false;
     }
 
-    // Calculate kernel execution time internally
+    float elapsedTime = 0.0f;
 
-    float kernelTime = 0.0f;
+    cudaEventElapsedTime(&elapsedTime, startEvent, stopEvent);
 
-    err = cudaEventElapsedTime(&kernelTime,startEvent,stopEvent);
-
-    if(err != cudaSuccess)
-        return false;
-    cout << "Kernel Execution Time: " << kernelTime << " ms" << endl;
-
-    // Copy processed frame from GPU to CPU
-
-    err = cudaMemcpy(output,d_output,outputSize,cudaMemcpyDeviceToHost);
-
-    if(err != cudaSuccess)
-    {
-        cerr << "Output copy failed: " << cudaGetErrorString(err) << endl;
-
-        return false;
-    }
+    std::cout << "Grayscale kernel time: " << elapsedTime << " ms\n";
 
     return true;
 }
 
-
-// GPU Cleanup
-
-void grayscaleClean()
+void Grayscale::cleanup()
 {
-    if(d_input)
+    if (d_input != nullptr)
+    {
         cudaFree(d_input);
+        d_input = nullptr;
+    }
 
-    if(d_output)
-        cudaFree(d_output);
-
-    if(startEvent)
+    if (startEvent != nullptr)
+    {
         cudaEventDestroy(startEvent);
+        startEvent = nullptr;
+    }
 
-    if(stopEvent)
+    if (stopEvent != nullptr)
+    {
         cudaEventDestroy(stopEvent);
-
-    d_input = nullptr;
-    d_output = nullptr;
-
-    startEvent = nullptr;
-    stopEvent = nullptr;
+        stopEvent = nullptr;
+    }
 
     imgWidth = 0;
     imgHeight = 0;
-
-    cout << "Grayscale GPU resources released!" << endl;
 }

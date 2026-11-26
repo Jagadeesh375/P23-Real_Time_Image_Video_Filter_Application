@@ -1,10 +1,30 @@
-bool grayscaleInit(int width, int height);
+#ifndef GRAYSCALE_H
+#define GRAYSCALE_H
 
-bool grayscaleProcess(
-    unsigned char* input,
-    unsigned char* output,
-    int width,
-    int height
-);
+#include <cuda_runtime.h>
 
-void grayscaleClean();
+class Grayscale
+{
+private:
+    unsigned char* d_input;
+
+    int imgWidth;
+    int imgHeight;
+
+    cudaEvent_t startEvent;
+    cudaEvent_t stopEvent;
+
+public:
+    Grayscale();
+
+    ~Grayscale();
+
+
+    bool initialize(int width, int height);
+
+    bool process(unsigned char* input, unsigned char* pboOutput, int width, int height);
+
+    void cleanup();
+};
+
+#endif
