@@ -1,10 +1,32 @@
 #ifndef BOX_BLUR_H
 #define BOX_BLUR_H
 
-bool blurInit(int width, int height);
+#include <cuda_runtime.h>
 
-bool blurProcess(unsigned char* input, unsigned char* output, int width, int height);
+class BoxBlur
+{
+private:
+    unsigned char* d_input;
 
-void blurClean();
+    int imgWidth;
+    int imgHeight;
+
+    cudaEvent_t startEvent;
+    cudaEvent_t stopEvent;
+
+public:
+    BoxBlur();
+
+    ~BoxBlur();
+
+    BoxBlur(const BoxBlur&) = delete;
+    BoxBlur& operator=(const BoxBlur&) = delete;
+
+    bool initialize(int width, int height);
+
+    bool process(unsigned char* input, unsigned char* pboOutput, int width, int height);
+
+    void cleanup();
+};
 
 #endif
