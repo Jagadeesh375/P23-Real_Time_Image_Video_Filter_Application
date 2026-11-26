@@ -27,7 +27,7 @@ bool OpenGLRenderer::initialize(int width, int height)
 {
     if (width <= 0 || height <= 0)
     {
-        std::cerr << "Invalid image dimensions\n";
+        std::cerr << "Invalid image dimensions" << std::endl;
         return false;
     }
 
@@ -37,7 +37,7 @@ bool OpenGLRenderer::initialize(int width, int height)
     // Initialize GLFW
     if (!glfwInit())
     {
-        std::cerr << "Failed to initialize GLFW\n";
+        std::cerr << "Failed to initialize GLFW" << std::endl;
         return false;
     }
 
@@ -46,18 +46,13 @@ bool OpenGLRenderer::initialize(int width, int height)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // Create GLFW window
-    window = glfwCreateWindow(
-        imgWidth,
-        imgHeight,
-        "Real-Time Image and Video Filter",
-        nullptr,
-        nullptr
-    );
+    // Create window
+    window = glfwCreateWindow(imgWidth,imgHeight,"Real-Time Image and Video Filter",nullptr,nullptr);
 
     if (window == nullptr)
     {
-        std::cerr << "Failed to create GLFW window\n";
+        std::cerr << "Failed to create GLFW window" << std::endl;
+
         glfwTerminate();
         return false;
     }
@@ -66,61 +61,113 @@ bool OpenGLRenderer::initialize(int width, int height)
     glfwMakeContextCurrent(window);
 
     // Initialize GLEW
-    glewExperimental = GL_TRUE;
+    //lewExperimental = GL_TRUE;
 
     if (glewInit() != GLEW_OK)
     {
-        std::cerr << "Failed to initialize GLEW\n";
+        std::cerr << "Failed to initialize GLEW" << std::endl;
         cleanup();
         return false;
     }
 
-    // Clear GLEW startup error
+    // Clear any startup OpenGL error from GLEW
     glGetError();
 
-    // Set viewport
     glViewport(0, 0, imgWidth, imgHeight);
 
-    // Create Pixel Buffer Object
-    glGenBuffers(1, &PBO);
 
-    // Bind PBO
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
+    // Fullscreen Quad
+    float vertices[] =
+    {
+        // Position       // Texture coordinates
 
-    // Allocate PBO memory
-    glBufferData(
-        GL_PIXEL_UNPACK_BUFFER,
-        imgWidth * imgHeight * 3,
-        nullptr,
-        GL_STREAM_DRAW
+        -1.0f, -1.0f,      0.0f, 1.0f,
+         1.0f, -1.0f,      1.0f, 1.0f,
+        -1.0f,  1.0f,      0.0f, 0.0f,
+
+         1.0f, -1.0f,      1.0f, 1.0f,
+         1.0f,  1.0f,      1.0f, 0.0f,
+        -1.0f,  1.0f,      0.0f, 0.0f
+    };
+
+    // Generate VAO and VBO
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW);
+
+    // Position attribute
+    glVertexAttribPointer(
+        0,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+        4 * sizeof(float),
+        (void*)0
     );
 
-    // Unbind PBO
+    glEnableVertexAttribArray(0);
+
+    // Texture coordinate attribute
+    glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,4 * sizeof(float),(void*)(2 * sizeof(float)));
+
+    glEnableVertexAttribArray(1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    // Create OpenGL Texture
+    glGenTextures(1, &texture);
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    /*glTexParameteri(
+        GL_TEXTURE_2D,
+        GL_TEXTURE_MIN_FILTER,
+        GL_LINEAR
+    );
+
+    glTexParameteri(
+        GL_TEXTURE_2D,
+        GL_TEXTURE_MAG_FILTER,
+        GL_LINEAR
+    );*/
+
+    // Allocate texture memory
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGB8,imgWidth,imgHeight,0,GL_BGR,GL_UNSIGNED_BYTE,nullptr);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Create Pixel Buffer Object (PBO)
+    glGenBuffers(1, &PBO);
+
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, PBO);
+
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, imgWidth * imgHeight * 3,nullptr,GL_STREAM_DRAW);
+
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
     // Register PBO with CUDA
-    cudaError_t cudaStatus = cudaGraphicsGLRegisterBuffer(
-        &cudaPBO,
-        PBO,
-        cudaGraphicsRegisterFlagsWriteDiscard
-    );
+    cudaError_t cudaStatus = cudaGraphicsGLRegisterBuffer(&cudaPBO,PBO,cudaGraphicsRegisterFlagsWriteDiscard);
 
     if (cudaStatus != cudaSuccess)
     {
-        std::cerr << "CUDA PBO registration failed: "
-                  << cudaGetErrorString(cudaStatus)
-                  << std::endl;
+        std::cerr << "CUDA PBO registration failed: " << cudaGetErrorString(cudaStatus) << std::endl;
 
         cleanup();
         return false;
     }
 
-    std::cout << "OpenGL initialized successfully\n";
-    std::cout << "CUDA PBO registered successfully\n";
+    std::cout << "OpenGL initialized successfully" << std::endl;
+    std::cout << "CUDA-OpenGL PBO registered successfully"
+              << std::endl;
 
     return true;
 }
-
 // Map PBO for CUDA access
 bool OpenGLRenderer::mapPBO()
 {
