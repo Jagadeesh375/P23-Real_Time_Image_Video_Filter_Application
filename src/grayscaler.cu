@@ -15,10 +15,10 @@ __global__ void grayscaleKernel(unsigned char* input, unsigned char* output, int
         unsigned char R = input[index + 2];
 
         unsigned char gray = 0.114f * B + 0.587f * G + 0.299f * R;
+        int  outputIndex = y * width + x;
 
-        output[index]     = gray;
-        output[index + 1] = gray;
-        output[index + 2] = gray;
+    	output[outputIndex] = gray;
+        
     }
 }
 

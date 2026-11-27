@@ -1,15 +1,12 @@
 #include <iostream>
-#include <cstring>
-
 #include "application.h"
 
 Application::Application()
 {
     imgWidth = 0;
     imgHeight = 0;
-
-    initialized = false;
     selectedFilter = 0;
+    initialized = false;
 }
 
 Application::~Application()
@@ -19,8 +16,7 @@ Application::~Application()
 
 bool Application::initialize(const char* filterName)
 {
-    // Step 1: Validate filter selection
-
+    // Select the filter
     if (strcmp(filterName, "invert") == 0)
     {
         selectedFilter = 1;
@@ -35,161 +31,175 @@ bool Application::initialize(const char* filterName)
     }
     else
     {
-        std::cerr << "Invalid filter selection\n";
+        std::cerr << "Invalid filter selection!" << std::endl;
         return false;
     }
 
-    // Step 2: Initialize camera
-
+    // Initialize camera
     if (!camera.initialize())
     {
-        std::cerr << "Camera initialization failed\n";
+        std::cerr << "Camera initialization failed!" << std::endl;
         return false;
     }
 
-    // Step 3: Capture initial frame
-
+    // Capture one frame to determine image dimensions
     if (!camera.capture(frame))
     {
-        std::cerr << "Initial camera frame capture failed\n";
-        cleanup();
+        std::cerr << "Failed to capture initial camera frame!" << std::endl;
         return false;
     }
-
-    // Step 4: Get image dimensions
 
     imgWidth = frame.cols;
     imgHeight = frame.rows;
 
-    // Step 5: Initialize OpenGL renderer
+    std::cout << "Image Width  : " << imgWidth << std::endl;
+    std::cout << "Image Height : " << imgHeight << std::endl;
 
-    if (!renderer.initialize(imgWidth, imgHeight))
+    // Initialize OpenGL renderer
+    // Filter selection determines PBO and texture channel count
+    if (!renderer.initialize(imgWidth, imgHeight, selectedFilter))
     {
-        std::cerr << "OpenGL renderer initialization failed\n";
-        cleanup();
+        std::cerr << "OpenGL renderer initialization failed!" << std::endl;
         return false;
     }
 
-    // Step 6: Initialize selected CUDA filter
-
-    bool initSuccess = false;
+    // Initialize the selected CUDA filter
+    bool filterInitialized = false;
 
     if (selectedFilter == 1)
     {
-        initSuccess = inversion.initialize(imgWidth, imgHeight);
+        filterInitialized = inversion.initialize(imgWidth, imgHeight);
     }
     else if (selectedFilter == 2)
     {
-        initSuccess = grayscale.initialize(imgWidth, imgHeight);
+        filterInitialized = grayscale.initialize(imgWidth, imgHeight);
     }
     else if (selectedFilter == 3)
     {
-        initSuccess = boxBlur.initialize(imgWidth, imgHeight);
+        filterInitialized = boxBlur.initialize(imgWidth, imgHeight);
     }
 
-    if (!initSuccess)
+    if (!filterInitialized)
     {
-        std::cerr << "CUDA initialization failed\n";
-        cleanup();
+        std::cerr << "CUDA filter initialization failed!" << std::endl;
         return false;
     }
 
     initialized = true;
 
-    std::cout << "Application initialized successfully\n";
+    std::cout << "Application initialized successfully!" << std::endl;
 
     return true;
 }
 
 void Application::run()
 {
+    if (!initialized)
+    {
+        std::cerr << "Application is not initialized!" << std::endl;
+        return;
+    }
+
     while (!renderer.windowShouldClose())
     {
-        // Step 1: Capture camera frame
-
+        // Capture camera frame
         if (!camera.capture(frame))
         {
-            std::cerr << "Camera frame capture failed\n";
+            std::cerr << "Camera frame capture failed!" << std::endl;
             break;
         }
 
-        // Step 2: Map OpenGL PBO
-
+        // Map OpenGL PBO for CUDA access
         if (!renderer.mapPBO())
         {
-            std::cerr << "PBO mapping failed\n";
+            std::cerr << "Failed to map PBO!" << std::endl;
             break;
         }
-
-        // Step 3: Get mapped PBO device pointer
 
         unsigned char* pboOutput = nullptr;
         size_t pboSize = 0;
 
+        // Get the CUDA device pointer to the mapped PBO
         if (!renderer.getMappedPointer(&pboOutput, &pboSize))
         {
-            std::cerr << "Failed to get PBO pointer\n";
+            std::cerr << "Failed to get mapped PBO pointer!" << std::endl;
             renderer.unmapPBO();
             break;
         }
 
-        // Step 4: Process frame using selected CUDA filter
-
+        // Execute the selected CUDA filter
         bool processSuccess = false;
 
         if (selectedFilter == 1)
         {
-            processSuccess = inversion.process(frame.data, pboOutput, imgWidth, imgHeight);
+            processSuccess = inversion.process(
+                frame.data,
+                pboOutput,
+                imgWidth,
+                imgHeight
+            );
         }
         else if (selectedFilter == 2)
         {
-            processSuccess = grayscale.process(frame.data, pboOutput, imgWidth, imgHeight);
+            processSuccess = grayscale.process(
+                frame.data,
+                pboOutput,
+                imgWidth,
+                imgHeight
+            );
         }
         else if (selectedFilter == 3)
         {
-            processSuccess = boxBlur.process(frame.data, pboOutput, imgWidth, imgHeight);
+            processSuccess = boxBlur.process(
+                frame.data,
+                pboOutput,
+                imgWidth,
+                imgHeight
+            );
         }
 
-        // Step 5: Unmap PBO
-
+        // Unmap PBO before OpenGL accesses it
         if (!renderer.unmapPBO())
         {
-            std::cerr << "PBO unmapping failed\n";
+            std::cerr << "Failed to unmap PBO!" << std::endl;
             break;
         }
 
         if (!processSuccess)
         {
-            std::cerr << "CUDA processing failed\n";
+            std::cerr << "CUDA filter processing failed!" << std::endl;
             break;
         }
 
+        // Upload PBO contents into the OpenGL texture
+        if (!renderer.updateTexture())
+        {
+            std::cerr << "Texture update failed!" << std::endl;
+            break;
+        }
+
+        // Process window events
+        glfwPollEvents();
+
+        // Rendering must be performed here if your renderer
+        // provides shader and render functionality.
     }
+
+    std::cout << "Application execution completed!" << std::endl;
 }
 
 void Application::cleanup()
 {
-    if (initialized)
-    {
-        if (selectedFilter == 1)
-        {
-            inversion.cleanup();
-        }
-        else if (selectedFilter == 2)
-        {
-            grayscale.cleanup();
-        }
-        else if (selectedFilter == 3)
-        {
-            boxBlur.cleanup();
-        }
+    // Release CUDA filter resources
+    inversion.cleanup();
+    grayscale.cleanup();
+    boxBlur.cleanup();
 
-        initialized = false;
-    }
-
+    // Release OpenGL and CUDA-OpenGL interop resources
     renderer.cleanup();
 
+    // Release camera resources
     camera.cleanup();
 
-    std::cout << "Application cleanup completed\n";
+    initialized = false;
 }

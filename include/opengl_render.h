@@ -1,4 +1,3 @@
-
 #ifndef OPENGL_RENDER_H
 #define OPENGL_RENDER_H
 
@@ -20,6 +19,7 @@ private:
     // OpenGL resources
     GLuint VAO;
     GLuint VBO;
+    GLuint texture;
 
     // Pixel Buffer Object
     GLuint PBO;
@@ -27,9 +27,10 @@ private:
     // CUDA graphics resource
     cudaGraphicsResource* cudaPBO;
 
-    // Image dimensions
+    // Image dimensions and channel count
     int imgWidth;
     int imgHeight;
+    int channels;
 
 public:
 
@@ -37,14 +38,15 @@ public:
     ~OpenGLRenderer();
 
     // Initialization
-    bool initialize(int width, int height);
+    bool initialize(int width, int height, int selectedFilter);
 
     // CUDA-PBO interoperability
     bool mapPBO();
     bool getMappedPointer(unsigned char** ptr, size_t* size);
     bool unmapPBO();
 
-    // Texture and rendering
+    // Update texture using PBO
+    bool updateTexture();
 
     // Window management
     bool windowShouldClose();
